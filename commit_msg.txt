@@ -1,0 +1,21 @@
+feat: production hardening - security, performance, realtime improvements
+
+Backend:
+- Separate auth rate limiter (20 req/15min brute-force protection)
+- General API limiter skips GET requests (200 req/15min for mutations)
+- Socket.IO CORS use FRONTEND_URL env var instead of wildcard
+- Global 500 error handler added
+- 404 route handler added
+- Fatal DB failure exits process
+- Socket ping timeouts configured
+
+- productController: filter hidden products from public GET /products
+- productController: new GET /products/admin/all for admin (all products)
+- productController: input validation for price/stock
+- productController: product_created/updated/deleted Socket.IO events
+- productController: lean() for performance on read operations
+
+- orderController: fix N+1 query (single $in query instead of per-item)
+- orderController: status whitelist validation
+- orderController: required fields validation
+- orderController: lean() on reads

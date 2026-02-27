@@ -3,20 +3,41 @@ const Product = require('../models/Product');
 const Settings = require('../models/Settings');
 const mongoose = require('mongoose');
 
+const ALLOWED_STATUSES = ['Pending', 'Shipped', 'Delivered'];
+
 exports.createOrder = async (req, res) => {
     try {
-        const { items, city, customerName, email, phone, address, notes, paymentMethod, vodafoneCashNumber, discountApplied } = req.body;
+        const {
+            items, city, customerName, email, phone,
+            address, notes, paymentMethod, vodafoneCashNumber, discountApplied
+        } = req.body;
 
-        if (!items || items.length === 0) {
+        // ── Basic Validation ──────────────────────────────────────────────────
+        if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ message: 'No items in order' });
         }
+        if (!city || !customerName || !phone || !address || !paymentMethod) {
+            return res.status(400).json({ message: 'Missing required order fields' });
+        }
 
+        // ── Fetch all products in ONE query (prevent N+1) ─────────────────────
+        const productIds = items.map(item => item.product);
+        const invalidIds = productIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+        if (invalidIds.length > 0) {
+            return res.status(400).json({ message: `Invalid product IDs: ${invalidIds.join(', ')}` });
+        }
+
+        const products = await Product.find({ _id: { $in: productIds }, status: 'active' }).lean();
+        const productMap = {};
+        products.forEach(p => { productMap[p._id.toString()] = p; });
+
+        // ── Validate & Calculate ──────────────────────────────────────────────
         let calculatedSubtotal = 0;
-
-        // Ensure items have actual DB prices
-        const validatedItems = await Promise.all(items.map(async (item) => {
-            const product = await Product.findById(item.product);
-            if (!product) throw new Error(`Product not found: ${item.name}`);
+        const validatedItems = items.map(item => {
+            const product = productMap[item.product?.toString()];
+            if (!product) throw new Error(`Product not found or unavailable: ${item.name}`);
+            if (!item.quantity || item.quantity < 1) throw new Error(`Invalid quantity for: ${product.name}`);
+            if (!item.size) throw new Error(`Size not selected for: ${product.name}`);
 
             const price = product.discountPrice || product.price;
             calculatedSubtotal += price * item.quantity;
@@ -27,44 +48,39 @@ exports.createOrder = async (req, res) => {
                 price: price,
                 quantity: item.quantity,
                 size: item.size,
-                image: product.images && product.images.length > 0 ? product.images[0] : item.image
+                image: product.images?.[0] || ''
             };
-        }));
+        });
 
-        // Ensure shipping cost is from DB settings based on city
+        // ── Shipping from DB only (no client trust) ───────────────────────────
         let shippingCost = 0;
-        const settings = await Settings.findOne({});
-        if (settings && settings.shippingRates) {
-            const cityRate = settings.shippingRates.find(r => r.city.toLowerCase() === city.toLowerCase());
-            if (cityRate) {
-                shippingCost = cityRate.cost;
-            } else if (req.body.shippingCost) {
-                // Strict validation: if city is not found in DB, fallback to 0. We will NOT trust the client's arbitrary shipping cost.
-                shippingCost = 0;
-            }
+        const settings = await Settings.findOne({}).lean();
+        if (settings?.shippingRates) {
+            const cityRate = settings.shippingRates.find(
+                r => r.city.toLowerCase() === city.toLowerCase()
+            );
+            if (cityRate) shippingCost = cityRate.cost;
         }
 
-        // Prevent discount tampering (cap at subtotal)
+        // ── Discount cap (prevent tampering) ──────────────────────────────────
         const validDiscount = Math.max(0, Math.min(Number(discountApplied) || 0, calculatedSubtotal));
         const calculatedTotal = calculatedSubtotal - validDiscount + shippingCost;
 
-        const orderData = {
-            customerName, email, phone, city, address, notes, paymentMethod, vodafoneCashNumber,
+        const order = new Order({
+            customerName, email, phone, city, address, notes,
+            paymentMethod, vodafoneCashNumber,
             items: validatedItems,
             subtotal: calculatedSubtotal,
-            shippingCost: shippingCost,
+            shippingCost,
             discountApplied: validDiscount,
             total: calculatedTotal
-        };
+        });
 
-        const order = new Order(orderData);
         const createdOrder = await order.save();
 
-        // Emit real-time event to admin panels
+        // Real-time event
         const io = req.app.get('io');
-        if (io) {
-            io.emit('new_order', createdOrder);
-        }
+        if (io) io.emit('new_order', createdOrder);
 
         res.status(201).json(createdOrder);
     } catch (err) {
@@ -74,7 +90,7 @@ exports.createOrder = async (req, res) => {
 
 exports.getOrders = async (req, res) => {
     try {
-        const orders = await Order.find({}).sort({ createdAt: -1 });
+        const orders = await Order.find({}).sort({ createdAt: -1 }).lean();
         res.json(orders);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -86,12 +102,9 @@ exports.getOrderById = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(404).json({ message: 'Order not found' });
         }
-        const order = await Order.findById(req.params.id);
-        if (order) {
-            res.json(order);
-        } else {
-            res.status(404).json({ message: 'Order not found' });
-        }
+        const order = await Order.findById(req.params.id).lean();
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+        res.json(order);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -99,24 +112,30 @@ exports.getOrderById = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
     try {
+        const { status } = req.body;
+
+        // Validate status value
+        if (!status || !ALLOWED_STATUSES.includes(status)) {
+            return res.status(400).json({
+                message: `Invalid status. Must be one of: ${ALLOWED_STATUSES.join(', ')}`
+            });
+        }
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(404).json({ message: 'Order not found' });
         }
-        const order = await Order.findById(req.params.id);
-        if (order) {
-            order.status = req.body.status || order.status;
-            const updatedOrder = await order.save();
 
-            // Emit real-time event to all clients
-            const io = req.app.get('io');
-            if (io) {
-                io.emit('order_updated', updatedOrder);
-            }
+        const updatedOrder = await Order.findByIdAndUpdate(
+            req.params.id,
+            { status },
+            { new: true, runValidators: true }
+        );
 
-            res.json(updatedOrder);
-        } else {
-            res.status(404).json({ message: 'Order not found' });
-        }
+        if (!updatedOrder) return res.status(404).json({ message: 'Order not found' });
+
+        const io = req.app.get('io');
+        if (io) io.emit('order_updated', updatedOrder);
+
+        res.json(updatedOrder);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -128,16 +147,12 @@ exports.deleteOrder = async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
         const order = await Order.findByIdAndDelete(req.params.id);
-        if (order) {
-            // Emit real-time deletion event
-            const io = req.app.get('io');
-            if (io) {
-                io.emit('order_deleted', { id: req.params.id });
-            }
-            res.json({ message: 'Order removed successfully' });
-        } else {
-            res.status(404).json({ message: 'Order not found' });
-        }
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+
+        const io = req.app.get('io');
+        if (io) io.emit('order_deleted', { id: req.params.id });
+
+        res.json({ message: 'Order removed successfully' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -152,12 +167,9 @@ exports.trackOrder = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(orderId)) {
             return res.status(404).json({ message: 'Order not found or invalid phone number' });
         }
-        const order = await Order.findOne({ _id: orderId, phone: phone });
-        if (order) {
-            res.json(order);
-        } else {
-            res.status(404).json({ message: 'Order not found or invalid phone number' });
-        }
+        const order = await Order.findOne({ _id: orderId, phone }).lean();
+        if (!order) return res.status(404).json({ message: 'Order not found or invalid phone number' });
+        res.json(order);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

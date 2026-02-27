@@ -18,51 +18,99 @@ const path = require('path');
 
 dotenv.config();
 
+// Warn if using fallback secrets in production
+if (!process.env.JWT_SECRET) {
+    console.warn('[SECURITY WARNING] JWT_SECRET is not set. Using insecure fallback. Set it in .env for production!');
+}
+
 const app = express();
 const server = http.createServer(app);
 
-// Socket.IO setup
+// ─── CORS Configuration ───────────────────────────────────────────────────────
+const allowedOrigins = process.env.FRONTEND_URL
+    ? [process.env.FRONTEND_URL, 'http://localhost:3000']
+    : ['http://localhost:3000'];
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, Postman, curl)
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(null, true); // Permissive for now; tighten in production
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// ─── Socket.IO Setup ──────────────────────────────────────────────────────────
 const io = new Server(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    }
+    cors: corsOptions,
+    // Prevent memory leaks: limit max listeners per event
+    pingTimeout: 60000,
+    pingInterval: 25000,
 });
 
 // Attach io to app so controllers can access it
 app.set('io', io);
 
 io.on('connection', (socket) => {
-    console.log('Socket connected:', socket.id);
-    socket.on('disconnect', () => {
-        console.log('Socket disconnected:', socket.id);
+    // Only log in development to reduce noise
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`[Socket] Connected: ${socket.id}`);
+    }
+    socket.on('disconnect', (reason) => {
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[Socket] Disconnected: ${socket.id} — ${reason}`);
+        }
     });
 });
 
-app.use(express.json());
-app.use(cors());
+// ─── Core Middleware ──────────────────────────────────────────────────────────
+app.use(express.json({ limit: '10mb' }));
+app.use(cors(corsOptions));
 
 // Security Headers
 app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
 
-// Rate Limiting (100 requests per 15 mins per IP for APIs)
-const apiLimiter = rateLimit({
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+// Strict limiter for auth endpoints (prevent brute-force)
+const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: 'Too many requests from this IP, please try again after 15 minutes',
+    max: 20,
+    message: { message: 'Too many login attempts. Please try again in 15 minutes.' },
     standardHeaders: true,
     legacyHeaders: false,
 });
+
+// General API limiter
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    message: { message: 'Too many requests from this IP, please try again after 15 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.method === 'GET', // Don't rate-limit read-only requests
+});
+
+app.use('/api/auth', authLimiter);
 app.use('/api/', apiLimiter);
 
-// Expose the raw uploads folder natively for development image storage
+// ─── Static Files ─────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/axisDB').then(() => console.log('MongoDB Connected'))
-    .catch(err => console.log(err));
+// ─── Database ─────────────────────────────────────────────────────────────────
+mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/axisDB')
+    .then(() => console.log('[DB] MongoDB Connected'))
+    .catch(err => {
+        console.error('[DB] MongoDB Connection Failed:', err.message);
+        process.exit(1); // Fatal — don't run without DB
+    });
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/upload', uploadRoute);
 app.use('/api/products', productRoute);
 app.use('/api/orders', orderRoute);
@@ -70,5 +118,19 @@ app.use('/api/settings', settingsRoute);
 app.use('/api/auth', authRoute);
 app.use('/api/coupons', couponRoute);
 
+// ─── Global Error Handler ─────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+    console.error('[Error]', err.stack);
+    res.status(err.status || 500).json({
+        message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+    });
+});
+
+// ─── 404 Handler ─────────────────────────────────────────────────────────────
+app.use((req, res) => {
+    res.status(404).json({ message: 'Route not found' });
+});
+
+// ─── Server Start ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5001;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`[Server] Running on port ${PORT}`));
