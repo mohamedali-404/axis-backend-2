@@ -1,3 +1,13 @@
 node_modules/
 .env
+.env.*
 uploads/
+
+# Temporary / helper files
+commit_msg.txt
+*.tmp
+*.log
+
+# Test scripts (not part of production)
+test_api.js
+scripts/
