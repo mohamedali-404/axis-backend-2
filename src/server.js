@@ -4,6 +4,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const http = require('http');
+const { Server } = require('socket.io');
+
 const uploadRoute = require('./routes/uploadRoute');
 const productRoute = require('./routes/productRoute');
 const orderRoute = require('./routes/orderRoute');
@@ -16,6 +19,25 @@ const path = require('path');
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
+
+// Socket.IO setup
+const io = new Server(server, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
+});
+
+// Attach io to app so controllers can access it
+app.set('io', io);
+
+io.on('connection', (socket) => {
+    console.log('Socket connected:', socket.id);
+    socket.on('disconnect', () => {
+        console.log('Socket disconnected:', socket.id);
+    });
+});
 
 app.use(express.json());
 app.use(cors());
@@ -49,4 +71,4 @@ app.use('/api/auth', authRoute);
 app.use('/api/coupons', couponRoute);
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

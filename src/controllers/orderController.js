@@ -59,6 +59,13 @@ exports.createOrder = async (req, res) => {
 
         const order = new Order(orderData);
         const createdOrder = await order.save();
+
+        // Emit real-time event to admin panels
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('new_order', createdOrder);
+        }
+
         res.status(201).json(createdOrder);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -99,6 +106,13 @@ exports.updateOrderStatus = async (req, res) => {
         if (order) {
             order.status = req.body.status || order.status;
             const updatedOrder = await order.save();
+
+            // Emit real-time event to all clients
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('order_updated', updatedOrder);
+            }
+
             res.json(updatedOrder);
         } else {
             res.status(404).json({ message: 'Order not found' });
@@ -115,6 +129,11 @@ exports.deleteOrder = async (req, res) => {
         }
         const order = await Order.findByIdAndDelete(req.params.id);
         if (order) {
+            // Emit real-time deletion event
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('order_deleted', { id: req.params.id });
+            }
             res.json({ message: 'Order removed successfully' });
         } else {
             res.status(404).json({ message: 'Order not found' });
