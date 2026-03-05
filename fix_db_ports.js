@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-mongoose.connect('mongodb+srv://axisAdmin:axisAdmin123456@cluster0.zg7v3ah.mongodb.net/axisDB?retryWrites=true&w=majority').then(async () => {
+mongoose.connect('mongoose.connect(process.env.MONGO_URI)').then(async () => {
     const Settings = require('./src/models/Settings');
     const Product = require('./src/models/Product');
 
