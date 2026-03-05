@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require('express');
 const mongoose = require('mongoose');
+const connectDB = require('./config/db');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
@@ -109,16 +110,11 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // ─── Database & Server Start ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
-        console.log('[DB] MongoDB Connected Successfully');
-        // ─── Server Start ─────────────────────────────────────────────────────
-        server.listen(PORT, () => console.log(`[Server] Running on port ${PORT}`));
-    })
-    .catch(err => {
-        console.error('[DB] MongoDB Connection Failed:', err.message);
-        process.exit(1); // Fatal — don't run without DB
-    });
+// Connect to Database
+connectDB();
+
+// ─── Server Start ─────────────────────────────────────────────────────
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/upload', uploadRoute);
