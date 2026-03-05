@@ -29,24 +29,10 @@ const app = express();
 const server = http.createServer(app);
 
 // ─── CORS Configuration ───────────────────────────────────────────────────────
-const allowedOrigins = process.env.FRONTEND_URL
-    ? [process.env.FRONTEND_URL, 'http://localhost:3000']
-    : ['http://localhost:3000'];
-
 const corsOptions = {
-    origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, Postman) in dev only, securely restrict in prod
-        if (!origin && process.env.NODE_ENV !== 'production') {
-            return callback(null, true);
-        }
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Strict CORS Policy: Origin not allowed.'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: "*", // مؤقت: السماح لأي دومين
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
 };
 
 // ─── Socket.IO Setup ──────────────────────────────────────────────────────────
@@ -74,7 +60,11 @@ io.on('connection', (socket) => {
 
 // ─── Core Middleware ──────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
-app.use(cors(corsOptions));
+app.use(cors({
+    origin: "*", // مؤقت: السماح لأي دومين
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+}));
 
 // Security Headers
 app.use(helmet({
