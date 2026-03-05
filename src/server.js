@@ -16,7 +16,7 @@ const couponRoute = require('./routes/couponRoute');
 
 const path = require('path');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 // Warn if using fallback secrets in production
 if (!process.env.JWT_SECRET) {
@@ -33,11 +33,14 @@ const allowedOrigins = process.env.FRONTEND_URL
 
 const corsOptions = {
     origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, Postman, curl)
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Allow requests with no origin (mobile apps, Postman) in dev only, securely restrict in prod
+        if (!origin && process.env.NODE_ENV !== 'production') {
+            return callback(null, true);
+        }
+        if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            callback(null, true); // Permissive for now; tighten in production
+            callback(new Error('Strict CORS Policy: Origin not allowed.'));
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -102,9 +105,15 @@ app.use('/api/', apiLimiter);
 // ─── Static Files ─────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// ─── Database ─────────────────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/axisDB')
-    .then(() => console.log('[DB] MongoDB Connected'))
+// ─── Database & Server Start ──────────────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => {
+        console.log('[DB] MongoDB Connected Successfully');
+        // ─── Server Start ─────────────────────────────────────────────────────
+        server.listen(PORT, () => console.log(`[Server] Running on port ${PORT}`));
+    })
     .catch(err => {
         console.error('[DB] MongoDB Connection Failed:', err.message);
         process.exit(1); // Fatal — don't run without DB
@@ -131,6 +140,4 @@ app.use((req, res) => {
     res.status(404).json({ message: 'Route not found' });
 });
 
-// ─── Server Start ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5001;
-server.listen(PORT, () => console.log(`[Server] Running on port ${PORT}`));
+// Server start logic moved to after DB connection

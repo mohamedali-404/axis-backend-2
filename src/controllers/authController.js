@@ -126,17 +126,38 @@ const forgotPassword = async (req, res) => {
 
 const updatePassword = async (req, res) => {
     try {
-        const { currentPassword, newPassword } = req.body;
+        const { currentUsername, currentPassword, newUsername, newPassword } = req.body;
         const user = await User.findById(req.user._id);
 
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
         if (user && (await user.matchPassword(currentPassword))) {
-            // check new password strength
-            if (!newPassword || newPassword.length < 12) {
-                return res.status(400).json({ message: 'New password must be at least 12 characters long.' });
+            if (currentUsername && currentUsername !== user.username) {
+                return res.status(401).json({ message: 'Invalid current username' });
             }
-            user.password = newPassword;
+
+            if (newUsername && newUsername.trim() !== '') {
+                if (newUsername.length < 3) {
+                    return res.status(400).json({ message: 'New username must be at least 3 characters long.' });
+                }
+                const exists = await User.findOne({ username: newUsername });
+                if (exists && exists._id.toString() !== user._id.toString()) {
+                    return res.status(400).json({ message: 'Username already taken.' });
+                }
+                user.username = newUsername;
+            }
+
+            if (newPassword && newPassword.trim() !== '') {
+                if (newPassword.length < 12) {
+                    return res.status(400).json({ message: 'New password must be at least 12 characters long.' });
+                }
+                user.password = newPassword;
+            }
+
             await user.save();
-            res.json({ message: 'Password updated successfully' });
+            res.json({ message: 'Security credentials updated successfully' });
         } else {
             res.status(401).json({ message: 'Invalid current password' });
         }

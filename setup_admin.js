@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ override: true });
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 const User = require('./src/models/User');
@@ -18,7 +18,7 @@ const generateRandomUsername = () => {
     return 'admin_' + crypto.randomBytes(4).toString('hex');
 };
 
-mongoose.connect(process.env.MONGO_URI).then(async () => {
+mongoose.connect(process.env.MONGODB_URI).then(async () => {
     try {
         await User.deleteMany({});
         console.log('All existing temporary users removed.');

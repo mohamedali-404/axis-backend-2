@@ -4,9 +4,9 @@ const User = require('./src/models/User');
 const Product = require('./src/models/Product');
 const Settings = require('./src/models/Settings');
 
-dotenv.config();
+dotenv.config({ override: true });
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/axisDB');
+mongoose.connect(process.env.MONGODB_URI);
 
 const importData = async () => {
     try {
