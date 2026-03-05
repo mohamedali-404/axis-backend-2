@@ -1,7 +1,7 @@
 node_modules/
 .env
 .env.*
-uploads/
+# uploads/
 
 # Temporary / helper files
 commit_msg.txt
