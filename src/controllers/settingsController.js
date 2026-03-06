@@ -17,7 +17,7 @@ exports.updateSettings = async (req, res) => {
         let settings = await Settings.findOne();
         if (settings) {
             const { _id, createdAt, updatedAt, __v, ...updateData } = req.body;
-            settings = await Settings.findByIdAndUpdate(settings._id, updateData, { new: true });
+            settings = await Settings.findByIdAndUpdate(settings._id, { $set: updateData }, { new: true, runValidators: true });
 
             // Emit real-time settings update to all clients
             const io = req.app.get('io');

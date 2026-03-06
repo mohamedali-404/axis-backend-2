@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const settingsSchema = new mongoose.Schema({
     brandLogo: { type: String, default: '' },
+    announcementText: { type: String, default: 'Free shipping on orders over $50 ✦ New arrivals every week ✦ Premium quality sportswear' },
     heroHeadline: { type: String, default: 'Train Hard. Look Sharp.' },
     heroBanner: { type: String, default: '' },
     subHeadline: { type: String, default: 'Minimal design. Maximum performance.' },
