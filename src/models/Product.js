@@ -6,7 +6,7 @@ const productSchema = new mongoose.Schema({
     descriptionAr: { type: String, required: true },
     price: { type: Number, required: true },
     discountPrice: { type: Number },
-    stock: { type: Number, required: true, default: 0 },
+    stock: { type: Number, default: null },
     images: [{ type: String }],
     sizes: [{ type: String }],
     sleeveType: { type: String, enum: ['Short', 'Long'], default: 'Short' },
