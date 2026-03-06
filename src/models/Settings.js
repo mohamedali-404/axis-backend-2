@@ -26,6 +26,9 @@ const settingsSchema = new mongoose.Schema({
         secondaryColor: { type: String, default: '#f7f7f7' }
     },
     aboutText: { type: String, default: 'We are AXIS. We believe in minimal design and maximum performance.' },
+    materialsAndCare: { type: String, default: '90% Polyester, 10% Elastane\nMoisture-wicking fabric\nMachine wash cold, gentle cycle\nDo not bleach or tumble dry' },
+    shippingInfo: { type: String, default: 'Standard delivery: 3–5 business days\nExpress delivery: 1–2 business days\nFree shipping on orders over 500 ج.م\nOrders placed before 2 PM ship same day' },
+    returnsInfo: { type: String, default: 'Free returns within 30 days of purchase\nItems must be unworn and in original packaging\nExchanges available for different sizes\nContact support to initiate a return' },
     whatsappNumber: { type: String, default: '201140892554' },
     sizeGuideImage: { type: String, default: '' },
     contactInfo: {
