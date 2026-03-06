@@ -4,35 +4,29 @@ const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+require('dotenv').config();
 
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'demo',
+    api_key: process.env.CLOUDINARY_API_KEY || '1234567890',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'abcdefg'
+});
 
-const storage = multer.diskStorage({
-    destination(req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename(req, file, cb) {
-        cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`);
+// Setup Cloudinary Storage for Multer
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'axis_uploads',
+        allowed_formats: ['jpeg', 'jpg', 'png', 'webp', 'svg'],
+        public_id: (req, file) => `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`
     }
 });
 
 const upload = multer({
     storage,
-    fileFilter: (req, file, cb) => {
-        const filetypes = /jpeg|jpg|png|webp|svg/;
-        const mimetypes = /image\/jpeg|image\/png|image\/webp|image\/svg\+xml/;
-        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = mimetypes.test(file.mimetype);
-
-        if (mimetype && extname) {
-            return cb(null, true);
-        } else {
-            cb(new Error('Images only! Allowed types: jpg, jpeg, png, webp, svg.'));
-        }
-    },
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
@@ -46,8 +40,23 @@ router.post('/', protect, (req, res) => {
             if (!req.file) {
                 return res.status(400).json({ message: 'No file uploaded' });
             }
-            const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-            res.json({ url });
+            res.json({ url: req.file.path });
+        } catch (error) {
+            res.status(500).json({ message: 'Image upload failed', error: error.message });
+        }
+    });
+});
+
+router.post('/receipt', (req, res) => {
+    upload.single('image')(req, res, function (err) {
+        if (err) {
+            return res.status(400).json({ message: err.message });
+        }
+        try {
+            if (!req.file) {
+                return res.status(400).json({ message: 'No file uploaded' });
+            }
+            res.json({ url: req.file.path });
         } catch (error) {
             res.status(500).json({ message: 'Image upload failed', error: error.message });
         }

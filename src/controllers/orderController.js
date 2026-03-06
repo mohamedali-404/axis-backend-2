@@ -3,13 +3,13 @@ const Product = require('../models/Product');
 const Settings = require('../models/Settings');
 const mongoose = require('mongoose');
 
-const ALLOWED_STATUSES = ['Pending', 'Shipped', 'Delivered'];
+const ALLOWED_STATUSES = ['Pending', 'Placed', 'Payment Review', 'Confirmed', 'Preparing', 'Shipped', 'Delivered'];
 
 exports.createOrder = async (req, res) => {
     try {
         const {
             items, city, customerName, email, phone,
-            address, notes, paymentMethod, vodafoneCashNumber, discountApplied
+            address, notes, paymentMethod, vodafoneCashNumber, discountApplied, receiptImage
         } = req.body;
 
         // ── Basic Validation ──────────────────────────────────────────────────
@@ -68,7 +68,7 @@ exports.createOrder = async (req, res) => {
 
         const order = new Order({
             customerName, email, phone, city, address, notes,
-            paymentMethod, vodafoneCashNumber,
+            paymentMethod, vodafoneCashNumber, receiptImage,
             items: validatedItems,
             subtotal: calculatedSubtotal,
             shippingCost,
@@ -141,6 +141,18 @@ exports.updateOrderStatus = async (req, res) => {
     }
 };
 
+exports.addReceipt = async (req, res) => {
+    try {
+        const { receiptImage } = req.body;
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: 'Order not found' });
+        const order = await Order.findByIdAndUpdate(req.params.id, { receiptImage }, { new: true });
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+        res.json(order);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
 exports.deleteOrder = async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -177,7 +189,7 @@ exports.trackOrder = async (req, res) => {
 
 exports.getPendingOrdersCount = async (req, res) => {
     try {
-        const count = await Order.countDocuments({ status: 'Pending' });
+        const count = await Order.countDocuments({ status: { $in: ['Pending', 'Placed', 'Payment Review'] } });
         res.json({ count });
     } catch (err) {
         res.status(500).json({ message: err.message });
