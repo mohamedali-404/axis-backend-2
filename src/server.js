@@ -8,6 +8,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
 const { Server } = require('socket.io');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 
 const uploadRoute = require('./routes/uploadRoute');
 const productRoute = require('./routes/productRoute');
@@ -71,6 +74,15 @@ app.use(cors({
 app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
+
+// Sanitize data against NoSQL injection
+app.use(mongoSanitize());
+
+// Sanitize user input from malicious HTML/JS (XSS)
+app.use(xss());
+
+// Prevent HTTP Parameter Pollution
+app.use(hpp());
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 // Strict limiter for auth endpoints (prevent brute-force)

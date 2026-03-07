@@ -6,6 +6,7 @@ const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const crypto = require('crypto');
 require('dotenv').config();
 
 // Configure Cloudinary
@@ -20,14 +21,28 @@ const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: 'axis_uploads',
-        allowed_formats: ['jpeg', 'jpg', 'png', 'webp', 'svg'],
-        public_id: (req, file) => `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`
+        allowed_formats: ['jpeg', 'jpg', 'png', 'webp'],
+        public_id: (req, file) => {
+            const randomName = crypto.randomBytes(16).toString('hex');
+            return `${Date.now()}-${randomName}`;
+        }
     }
 });
 
 const upload = multer({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /jpeg|jpg|png|webp/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+
+        if (mimetype && extname) {
+            return cb(null, true);
+        } else {
+            cb(new Error('Error: Only images (JPG, PNG, WEBP) are allowed!'), false);
+        }
+    }
 });
 
 router.post('/', protect, (req, res) => {
