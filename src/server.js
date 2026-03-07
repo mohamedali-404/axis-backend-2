@@ -105,7 +105,26 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // ─── Server Start ─────────────────────────────────────────────────────
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+
+    // Self-ping to keep Render instance awake (every 10 minutes)
+    const pingInterval = 10 * 60 * 1000; // 10 minutes
+    setInterval(() => {
+        const https = require('https');
+        const url = 'https://axis-backend-2.onrender.com/api/ping';
+
+        https.get(url, (res) => {
+            if (res.statusCode === 200) {
+                console.log(`[Self-Ping] Successfully pinged server to stay awake (${new Date().toISOString()})`);
+            } else {
+                console.log(`[Self-Ping] Ping returned status code: ${res.statusCode}`);
+            }
+        }).on('error', (err) => {
+            console.error(`[Self-Ping Error] Failed to ping server: ${err.message}`);
+        });
+    }, pingInterval);
+});
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/upload', uploadRoute);
@@ -114,6 +133,11 @@ app.use('/api/orders', orderRoute);
 app.use('/api/settings', settingsRoute);
 app.use('/api/auth', authRoute);
 app.use('/api/coupons', couponRoute);
+
+// ─── Self-ping Endpoint ───────────────────────────────────────────────────────
+app.get('/api/ping', (req, res) => {
+    res.status(200).send('pong');
+});
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
