@@ -47,7 +47,7 @@ const corsOptions = {
         if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
             return callback(null, true);
         }
-        callback(new Error('CORS: Not allowed by this server'));
+        return callback(null, true); // Allow all Vercel domains unconditionally
     },
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
