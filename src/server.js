@@ -33,8 +33,22 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // ─── CORS Configuration ───────────────────────────────────────────────────────
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://axis-backend-2.onrender.com',
+    process.env.FRONTEND_URL,
+].filter(Boolean);
+
 const corsOptions = {
-    origin: "*", // مؤقت: السماح لأي دومين
+    origin: function(origin, callback) {
+        // Allow requests with no origin (Postman, curl, server-side)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+            return callback(null, true);
+        }
+        callback(new Error('CORS: Not allowed by this server'));
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 };
@@ -64,11 +78,7 @@ io.on('connection', (socket) => {
 
 // ─── Core Middleware ──────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
-app.use(cors({
-    origin: "*", // مؤقت: السماح لأي دومين
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true
-}));
+app.use(cors(corsOptions));
 
 // Security Headers
 app.use(helmet({
@@ -116,27 +126,7 @@ const PORT = process.env.PORT || 5000;
 // Connect to Database
 connectDB();
 
-// ─── Server Start ─────────────────────────────────────────────────────
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-
-    // Self-ping to keep Render instance awake (every 10 minutes)
-    const pingInterval = 10 * 60 * 1000; // 10 minutes
-    setInterval(() => {
-        const https = require('https');
-        const url = 'https://axis-backend-2.onrender.com/api/ping';
-
-        https.get(url, (res) => {
-            if (res.statusCode === 200) {
-                console.log(`[Self-Ping] Successfully pinged server to stay awake (${new Date().toISOString()})`);
-            } else {
-                console.log(`[Self-Ping] Ping returned status code: ${res.statusCode}`);
-            }
-        }).on('error', (err) => {
-            console.error(`[Self-Ping Error] Failed to ping server: ${err.message}`);
-        });
-    }, pingInterval);
-});
+// Removed server.listen from here. It will be pushed to the bottom of the file.
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/upload', uploadRoute);
@@ -164,4 +154,27 @@ app.use((req, res) => {
     res.status(404).json({ message: 'Route not found' });
 });
 
-// Server start logic moved to after DB connection
+// ─── Server Start ─────────────────────────────────────────────────────
+server.listen(PORT, () => {
+    console.log(`[Server] Running on http://localhost:${PORT}`);
+    console.log(`[Server] API available at http://localhost:${PORT}/api`);
+
+    // Self-ping only in production to keep Render instance awake
+    if (process.env.NODE_ENV === 'production') {
+        const pingInterval = 10 * 60 * 1000; // 10 minutes
+        const pingUrl = process.env.RENDER_SERVICE_URL
+            ? `${process.env.RENDER_SERVICE_URL}/api/ping`
+            : 'https://axis-backend-2.onrender.com/api/ping';
+
+        setInterval(() => {
+            const https = require('https');
+            https.get(pingUrl, (res) => {
+                if (res.statusCode === 200) {
+                    console.log(`[Self-Ping] OK (${new Date().toISOString()})`);
+                }
+            }).on('error', (err) => {
+                console.error(`[Self-Ping Error] ${err.message}`);
+            });
+        }, pingInterval);
+    }
+});
